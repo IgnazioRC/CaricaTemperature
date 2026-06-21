@@ -34,7 +34,7 @@ if not getattr(_sys, 'frozen', False):
 
 
 APP_NAME = "CaricaTemperature"
-VERSION  = "1.5.0"
+VERSION  = "1.5.1"
 
 from irc_paths import DROPBOX_ROOT, DROPBOX_USER_ROOT, app_config_dir
 from irc_logging import setup_app_logger
@@ -76,9 +76,9 @@ DEFAULT_CSV_DIR   = Path.home() / "Downloads"
 
 @dataclass
 class Settings:
-    base_path: str = DEFAULT_BASE_PATH
-    last_excel_dir: str = DEFAULT_EXCEL_DIR
-    last_csv_dir: str = DEFAULT_CSV_DIR
+    base_path: str      = DEFAULT_BASE_PATH
+    last_excel_dir: str = str(DEFAULT_EXCEL_DIR)   # str() evita Path non serializzabile al primo avvio
+    last_csv_dir: str   = str(DEFAULT_CSV_DIR)
 def _ensure_dirs() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -165,7 +165,7 @@ def main() -> None:
     }
 
     app = tk.Tk()
-    app.title("Caricamento Temperature — Freeze 1.4.2")
+    app.title(f"Caricamento Temperature v{VERSION}")
     app.minsize(820, 520)
 
     # -----------------------
@@ -299,6 +299,8 @@ def main() -> None:
         ui_log(f"✅ {key}: selezionato {log_path(path)}")
 
     def run() -> None:
+        if getattr(app, '_running', False):
+            return
         if not stato["excel_path"]:
             messagebox.showerror("Errore", "Seleziona prima il file Excel.")
             return
@@ -315,6 +317,8 @@ def main() -> None:
             "csv_expected": dict(stato["csv_expected"]),
         }
 
+        app._running = True
+        app.btn_run.config(state="disabled")
         ui_progress(0)
         ui_status("Avvio…")
         ui_log("🚀 Avvio caricamento…")
@@ -352,11 +356,20 @@ def main() -> None:
                 nome_atteso = config["csv_expected"].get(key, key)
                 log(f"📥 Lettura {key} ({nome_atteso}): {log_path(path)}")
                 dati = lettura_csv_freeze.leggi_csv_4_0(path)
-                dati_uniti.append((key, dati))
+                if not dati:
+                    log(f"⚠️ {key}: 0 righe valide — file saltato (formato timestamp incompatibile?)")
+                else:
+                    log(f"   {key}: {len(dati)} timestamp letti")
+                    dati_uniti.append((key, dati))
                 progress(5 + i * 20)
 
             if not dati_uniti:
-                raise ValueError("Nessun CSV valido da processare.")
+                raise ValueError("Nessun CSV valido da processare: tutti i file hanno 0 righe valide.")
+
+            # verifica che ci siano effettivamente dati da scrivere
+            totale_record = sum(len(d) for _, d in dati_uniti)
+            if totale_record == 0:
+                raise ValueError("Nessun dato valido trovato nei CSV selezionati.")
 
             status("Scrittura su Excel…")
             progress(80)
@@ -364,12 +377,15 @@ def main() -> None:
 
             progress(100)
             status("Completato ✅")
-            log("✅ Scrittura completata.")
+            log(f"✅ Scrittura completata ({totale_record} temperature scritte).")
             log("✅ Caricamento completato con successo.")
 
         except Exception as e:
             status("Errore ❌")
             log(f"❌ Errore: {e}")
+        finally:
+            app.after(0, lambda: app.btn_run.config(state="normal"))
+            app.after(0, lambda: setattr(app, '_running', False))
 
     # -----------------------
     # Bind methods expected by gui_freeze
@@ -392,7 +408,7 @@ def main() -> None:
 # ============================================================
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Caricamento Temperature — Freeze 1.4.2")
+    p = argparse.ArgumentParser(description=f"Caricamento Temperature v{VERSION}")
     p.add_argument(
         "--base_path",
         default=None,

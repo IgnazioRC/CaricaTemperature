@@ -16,6 +16,13 @@ from datetime import datetime, timedelta
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Alignment, numbers
 from openpyxl.utils import get_column_letter
+import locale
+
+# Imposta locale italiano una volta sola al caricamento del modulo
+try:
+    locale.setlocale(locale.LC_TIME, "it_IT.UTF-8")
+except Exception:
+    pass  # fallback: nomi dei fogli in inglese (es. "jun 26")
 
 TOLLERANZA_MINUTI = 5  # tolleranza 5 min tra timestamp e riga
 
@@ -23,11 +30,6 @@ TOLLERANZA_MINUTI = 5  # tolleranza 5 min tra timestamp e riga
 #  FUNZIONI DI SUPPORTO
 # =========================================================
 def nome_foglio_da_data(dt):
-    import locale
-    try:
-        locale.setlocale(locale.LC_TIME, "it_IT.UTF-8")
-    except Exception:
-        pass
     return dt.strftime("%b %y").lower()
 
 def genera_colonna_date(sheet, anno, mese, intestazioni):
